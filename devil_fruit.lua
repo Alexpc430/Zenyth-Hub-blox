@@ -1,4 +1,4 @@
--- // ZENYTH DEBUGGER HUB - VILLA DEV EDITION (FRUIT EDITION)
+-- // ZENYTH DEBUGGER HUB - VILLA DEV EDITION (FRUIT EDITION V2 OPTIMIZADA)
 local TweenService = game:GetService("TweenService")
 local Player = game.Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
@@ -40,19 +40,17 @@ local function EnviarNotificacion(nombreFruta, distancia)
     Txt.Size = UDim2.new(1, -20, 1, 0)
     Txt.Position = UDim2.new(0, 10, 0, 0)
     Txt.BackgroundTransparency = 1
-    Txt.Text = "🌟 ¡" .. nombreFruta .. " apareció!\nDistancia: " .. tostring(math.floor(distancia)) .. "m"
+    Txt.Text = "🌟 ¡" .. nombreFruta .. " ha aparecido!\nDistancia: " .. tostring(math.floor(distancia)) .. "m"
     Txt.TextColor3 = Color3.fromRGB(255, 220, 100)
     Txt.Font = Enum.Font.GothamBlack
     Txt.TextSize = 14
     Txt.TextXAlignment = Enum.TextXAlignment.Left
     Txt.TextTransparency = 1
 
-    -- Animación de entrada
     TweenService:Create(Notif, TweenInfo.new(0.5), {BackgroundTransparency = 0.2}):Play()
     TweenService:Create(Stroke, TweenInfo.new(0.5), {Transparency = 0}):Play()
     TweenService:Create(Txt, TweenInfo.new(0.5), {TextTransparency = 0}):Play()
 
-    -- Desaparecer después de 6 segundos
     task.delay(6, function()
         local outTween = TweenService:Create(Notif, TweenInfo.new(0.5), {BackgroundTransparency = 1})
         TweenService:Create(Stroke, TweenInfo.new(0.5), {Transparency = 1}):Play()
@@ -83,7 +81,7 @@ local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, -80, 0, 40)
 Title.Position = UDim2.new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Zenyth V1 - Fruit Hunter"
+Title.Text = "Zenyth V2 - Fruit Hunter"
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
@@ -141,35 +139,30 @@ UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then update(input) end
 end)
 
--- // 3. LÓGICA DE DETECCIÓN Y TELETRANSPORTE
+-- // 3. LÓGICA OPTIMIZADA DE DETECCIÓN Y ESP
 local ActivarESP = false
 local MetodoTween = false
 local ESP_Folder = Instance.new("Folder", sg)
 ESP_Folder.Name = "Zenyth_ESP_Storage"
 
--- Lista de frutas permitidas
 local FrutasPermitidas = {
     "portal", "pain", "lightning", "buddha", "gravity", "mammoth", "t-rex",
     "dough", "spirit", "tiger", "yeti", "kitsune", "control", "dragon"
 }
 
-local CacheFrutas = {}
-local FrutasNotificadas = {}
+-- Aquí guardamos el letrero de cada fruta para NO borrarlo y recrearlo
+local FrutasRegistradas = {}
 
--- Función de validación estricta
 local function esFrutaValida(v)
-    -- Debe ser un modelo o una tool física en el suelo
     if not (v:IsA("Model") or v:IsA("Tool") or v:IsA("BasePart")) then return false end
     
-    -- IGNORAR si está dentro de un jugador o NPC (Si su padre o abuelo tiene Humanoid)
+    -- Ignorar si está en un jugador, NPC o mochila
     if v.Parent and v.Parent:FindFirstChild("Humanoid") then return false end
     if v.Parent and v.Parent.Parent and v.Parent.Parent:FindFirstChild("Humanoid") then return false end
 
     local nombreLower = string.lower(v.Name)
     
-    -- Verificar si tiene "fruit" o "devil" en el nombre (para evitar falsos positivos)
     if string.find(nombreLower, "fruit") or string.find(nombreLower, "devil") then
-        -- Comprobar si es una de las frutas de la lista
         for _, frutaReq in ipairs(FrutasPermitidas) do
             if string.find(nombreLower, frutaReq) then
                 return true
@@ -179,69 +172,105 @@ local function esFrutaValida(v)
     return false
 end
 
--- Escáner Optimizado (Corre cada 1 segundo en lugar de cada frame)
+-- Escáner Lento (Solo cada 3 segundos, cero lag)
 task.spawn(function()
-    while task.wait(1) do
+    while task.wait(3) do
         local char = Player.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
         local miPos = char.HumanoidRootPart.Position
 
-        local nuevasFrutas = {}
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if esFrutaValida(v) then
-                table.insert(nuevasFrutas, v)
-                
-                -- Sistema de Notificación
-                if not FrutasNotificadas[v] then
-                    FrutasNotificadas[v] = true
-                    local pos = v:IsA("BasePart") and v.Position or v:GetPivot().Position
+        -- Evita errores silenciando el escaneo en caso de cosas raras en el mapa
+        pcall(function()
+            for _, v in ipairs(workspace:GetDescendants()) do
+                -- Si no la hemos registrado y es válida, la agregamos
+                if not FrutasRegistradas[v] and esFrutaValida(v) then
+                    
+                    local AdorneePart = v:IsA("BasePart") and v or v:FindFirstChildWhichIsA("BasePart", true)
+                    if not AdorneePart then continue end
+
+                    -- Calculamos distancia inicial para la notificación
+                    local pos = AdorneePart.Position
                     local dist = (miPos - pos).Magnitude
                     EnviarNotificacion(v.Name, dist)
+
+                    -- Creamos el letrero visual SOLO UNA VEZ
+                    local bgui = Instance.new("BillboardGui", ESP_Folder)
+                    bgui.Adornee = AdorneePart
+                    bgui.Size = UDim2.new(0, 200, 0, 50)
+                    bgui.AlwaysOnTop = true
+                    bgui.ExtentsOffset = Vector3.new(0, 3, 0)
+                    bgui.Visible = ActivarESP -- Se oculta si el ESP está apagado
+                    
+                    local txt = Instance.new("TextLabel", bgui)
+                    txt.Size = UDim2.new(1, 0, 1, 0)
+                    txt.BackgroundTransparency = 1
+                    txt.TextColor3 = Color3.fromRGB(200, 120, 255)
+                    txt.Font = Enum.Font.GothamBold
+                    txt.TextSize = 14
+                    txt.TextStrokeTransparency = 0.2
+                    txt.Text = "🍎 " .. v.Name .. "\n[...]"
+
+                    -- Lo guardamos en el diccionario
+                    FrutasRegistradas[v] = {Gui = bgui, Texto = txt, CorePart = AdorneePart}
                 end
             end
-        end
-        CacheFrutas = nuevasFrutas
+        end)
     end
 end)
 
-local function obtenerFrutaMasCercana()
-    local frutaCercana = nil
-    local menorDistancia = math.huge
+-- Actualizador Visual Súper Ligero (Solo actualiza el número de la distancia)
+RunService.RenderStepped:Connect(function()
     local char = Player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     local miPos = char.HumanoidRootPart.Position
 
-    for _, v in ipairs(CacheFrutas) do
-        if v and v.Parent then
-            local pos = v:IsA("BasePart") and v.Position or v:GetPivot().Position
-            local dist = (miPos - pos).Magnitude
-            if dist < menorDistancia then
-                menorDistancia = dist
-                frutaCercana = v
-            end
+    ESP_Folder.Visible = ActivarESP
+
+    for frutaObj, data in pairs(FrutasRegistradas) do
+        -- Si la fruta fue agarrada o destruida, limpiamos su letrero de la memoria
+        if not frutaObj or not frutaObj.Parent or not data.CorePart or not data.CorePart.Parent then
+            if data.Gui then data.Gui:Destroy() end
+            FrutasRegistradas[frutaObj] = nil
+            continue
+        end
+
+        -- Si el ESP está activo, calculamos la nueva distancia sin crear lag
+        if ActivarESP then
+            local dist = math.floor((miPos - data.CorePart.Position).Magnitude)
+            data.Texto.Text = "🍎 " .. frutaObj.Name .. "\n[" .. tostring(dist) .. "m]"
         end
     end
-    return frutaCercana, menorDistancia
-end
+end)
 
--- Función de Teletransporte
 local function ejecutarTeleport()
     local char = Player.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return end
     
-    local fruta, dist = obtenerFrutaMasCercana()
-    if not fruta then 
-        warn("❌ No hay ninguna de las frutas solicitadas en el mapa.")
+    local menorDistancia = math.huge
+    local frutaDestino = nil
+
+    -- Buscamos la más cercana en nuestra memoria rápida
+    for obj, data in pairs(FrutasRegistradas) do
+        if obj and obj.Parent and data.CorePart and data.CorePart.Parent then
+            local dist = (root.Position - data.CorePart.Position).Magnitude
+            if dist < menorDistancia then
+                menorDistancia = dist
+                frutaDestino = data.CorePart
+            end
+        end
+    end
+
+    if not frutaDestino then 
+        warn("❌ No hay frutas registradas en el mapa en este momento.")
         return 
     end
     
-    local destinoPos = fruta:IsA("BasePart") and fruta.CFrame or fruta:GetPivot()
-    local destinoAjustado = destinoPos * CFrame.new(0, 3, 0) 
+    local destinoAjustado = frutaDestino.CFrame * CFrame.new(0, 3, 0) 
 
     if MetodoTween then
         local velocidad = 150 
-        local tiempo = dist / velocidad
+        local tiempo = menorDistancia / velocidad
         local info = TweenInfo.new(tiempo, Enum.EasingStyle.Linear)
         local tween = TweenService:Create(root, info, {CFrame = destinoAjustado})
         root.Velocity = Vector3.new(0,0,0)
@@ -252,40 +281,7 @@ local function ejecutarTeleport()
     end
 end
 
--- Renderizado de ESP Optimizado
-RunService.RenderStepped:Connect(function()
-    ESP_Folder:ClearAllChildren()
-    if not ActivarESP or not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then return end
-    
-    local miPos = Player.Character.HumanoidRootPart.Position
-    
-    for _, v in ipairs(CacheFrutas) do
-        if v and v.Parent then
-            local pos = v:IsA("BasePart") and v.Position or v:GetPivot().Position
-            local dist = math.floor((miPos - pos).Magnitude)
-            
-            local AdorneePart = v:IsA("BasePart") and v or v:FindFirstChildWhichIsA("BasePart", true)
-            if AdorneePart then
-                local bgui = Instance.new("BillboardGui", ESP_Folder)
-                bgui.Adornee = AdorneePart
-                bgui.Size = UDim2.new(0, 200, 0, 50)
-                bgui.AlwaysOnTop = true
-                bgui.ExtentsOffset = Vector3.new(0, 3, 0)
-                
-                local txt = Instance.new("TextLabel", bgui)
-                txt.Size = UDim2.new(1, 0, 1, 0)
-                txt.BackgroundTransparency = 1
-                txt.Text = "🍎 " .. v.Name .. "\n[" .. tostring(dist) .. "m]"
-                txt.TextColor3 = Color3.fromRGB(200, 120, 255)
-                txt.Font = Enum.Font.GothamBold
-                txt.TextSize = 14
-                txt.TextStrokeTransparency = 0.2
-            end
-        end
-    end
-end)
-
--- // 4. COMPONENTES INTERNOS (CREADOR DE BOTONES Y TOGGLES)
+-- // 4. CONTROLES Y BOTONES
 local function createToggle(name, callback)
     local toggleState = false
     local BtnFrame = Instance.new("TextButton", Container)
@@ -340,11 +336,9 @@ local function createActionButton(name, callback)
     ActionBtn.TextSize = 14
     ActionBtn.Active = true
     Instance.new("UICorner", ActionBtn).CornerRadius = UDim.new(0, 8)
-    
     ActionBtn.MouseButton1Click:Connect(callback)
 end
 
--- Generar Controles en el Menú
 createToggle("Ver Frutas (ESP + Distancia)", function(state)
     ActivarESP = state
 end)
@@ -357,7 +351,7 @@ createActionButton("⚡ TELEPORT A LA FRUTA", function()
     ejecutarTeleport()
 end)
 
--- Botones Superior Derecha
+-- Botones Cierre y Minimizar
 local Close = Instance.new("TextButton", Main)
 Close.Size = UDim2.new(0, 30, 0, 30)
 Close.Position = UDim2.new(1, -35, 0, 5)
@@ -366,7 +360,6 @@ Close.BackgroundTransparency = 1
 Close.TextColor3 = Color3.fromRGB(200, 150, 255)
 Close.Font = Enum.Font.GothamBold
 Close.TextSize = 22
-Close.Active = true
 Close.MouseButton1Click:Connect(function() sg:Destroy() end)
 
 local Minimize = Instance.new("TextButton", Main)
@@ -377,8 +370,6 @@ Minimize.BackgroundTransparency = 1
 Minimize.TextColor3 = Color3.fromRGB(200, 150, 255)
 Minimize.Font = Enum.Font.GothamBold
 Minimize.TextSize = 22
-Minimize.Active = true
-
 Minimize.MouseButton1Click:Connect(function()
     Main.Visible = false
     MiniBtn.Visible = true
@@ -389,7 +380,7 @@ MiniBtn.MouseButton1Click:Connect(function()
     Main.Visible = true
 end)
 
--- // 5. ANIMACIÓN INICIAL DE ENTRADA
+-- Entrada
 local OriginalPosition = Main.Position
 Main.Position = UDim2.new(OriginalPosition.X.Scale, OriginalPosition.X.Offset, 0, -350)
 TweenService:Create(Main, TweenInfo.new(0.5, Enum.EasingStyle.Back), {Position = OriginalPosition}):Play()
