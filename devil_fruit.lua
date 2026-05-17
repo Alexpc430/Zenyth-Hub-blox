@@ -1,4 +1,4 @@
--- // ZENYTH DEBUGGER HUB - VILLA DEV EDITION (FRUIT EDITION V2 OPTIMIZADA)
+-- // ZENYTH DEBUGGER HUB - VILLA DEV EDITION (FRUIT EDITION V3 - DETECCIÓN MEJORADA)
 local TweenService = game:GetService("TweenService")
 local Player = game.Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
@@ -81,7 +81,7 @@ local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, -80, 0, 40)
 Title.Position = UDim2.new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Zenyth V2 - Fruit Hunter"
+Title.Text = "Zenyth V3 - Fruit Hunter"
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
@@ -139,7 +139,7 @@ UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then update(input) end
 end)
 
--- // 3. LÓGICA OPTIMIZADA DE DETECCIÓN Y ESP
+-- // 3. LÓGICA DE DETECCIÓN MEJORADA (SIN RESTRICCIÓN DE "FRUIT")
 local ActivarESP = false
 local MetodoTween = false
 local ESP_Folder = Instance.new("Folder", sg)
@@ -150,56 +150,58 @@ local FrutasPermitidas = {
     "dough", "spirit", "tiger", "yeti", "kitsune", "control", "dragon"
 }
 
--- Aquí guardamos el letrero de cada fruta para NO borrarlo y recrearlo
 local FrutasRegistradas = {}
 
 local function esFrutaValida(v)
-    if not (v:IsA("Model") or v:IsA("Tool") or v:IsA("BasePart")) then return false end
-    
-    -- Ignorar si está en un jugador, NPC o mochila
+    -- 1. Primero, nos aseguramos de que no sea parte de un NPC o Jugador
     if v.Parent and v.Parent:FindFirstChild("Humanoid") then return false end
     if v.Parent and v.Parent.Parent and v.Parent.Parent:FindFirstChild("Humanoid") then return false end
 
+    -- 2. Debe ser un modelo o herramienta en el mundo
+    if not (v:IsA("Model") or v:IsA("Tool") or v:IsA("BasePart")) then return false end
+
     local nombreLower = string.lower(v.Name)
     
-    if string.find(nombreLower, "fruit") or string.find(nombreLower, "devil") then
-        for _, frutaReq in ipairs(FrutasPermitidas) do
-            if string.find(nombreLower, frutaReq) then
+    -- 3. Buscamos directamente si el nombre contiene alguna de las frutas de la lista
+    for _, frutaReq in ipairs(FrutasPermitidas) do
+        if string.find(nombreLower, frutaReq) then
+            -- Verificamos que no sea un NPC con nombre de fruta (por si acaso)
+            if not v:FindFirstChild("Humanoid") then
                 return true
             end
         end
     end
+    
     return false
 end
 
--- Escáner Lento (Solo cada 3 segundos, cero lag)
+-- Escáner (Corre cada 3 segundos)
 task.spawn(function()
     while task.wait(3) do
         local char = Player.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
         local miPos = char.HumanoidRootPart.Position
 
-        -- Evita errores silenciando el escaneo en caso de cosas raras en el mapa
         pcall(function()
             for _, v in ipairs(workspace:GetDescendants()) do
-                -- Si no la hemos registrado y es válida, la agregamos
                 if not FrutasRegistradas[v] and esFrutaValida(v) then
                     
                     local AdorneePart = v:IsA("BasePart") and v or v:FindFirstChildWhichIsA("BasePart", true)
                     if not AdorneePart then continue end
 
-                    -- Calculamos distancia inicial para la notificación
                     local pos = AdorneePart.Position
                     local dist = (miPos - pos).Magnitude
+                    
+                    -- Enviamos la notificación
                     EnviarNotificacion(v.Name, dist)
 
-                    -- Creamos el letrero visual SOLO UNA VEZ
+                    -- Creamos el ESP
                     local bgui = Instance.new("BillboardGui", ESP_Folder)
                     bgui.Adornee = AdorneePart
                     bgui.Size = UDim2.new(0, 200, 0, 50)
                     bgui.AlwaysOnTop = true
                     bgui.ExtentsOffset = Vector3.new(0, 3, 0)
-                    bgui.Visible = ActivarESP -- Se oculta si el ESP está apagado
+                    bgui.Enabled = ActivarESP
                     
                     local txt = Instance.new("TextLabel", bgui)
                     txt.Size = UDim2.new(1, 0, 1, 0)
@@ -210,7 +212,6 @@ task.spawn(function()
                     txt.TextStrokeTransparency = 0.2
                     txt.Text = "🍎 " .. v.Name .. "\n[...]"
 
-                    -- Lo guardamos en el diccionario
                     FrutasRegistradas[v] = {Gui = bgui, Texto = txt, CorePart = AdorneePart}
                 end
             end
@@ -218,23 +219,23 @@ task.spawn(function()
     end
 end)
 
--- Actualizador Visual Súper Ligero (Solo actualiza el número de la distancia)
+-- Actualizador Visual
 RunService.RenderStepped:Connect(function()
     local char = Player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     local miPos = char.HumanoidRootPart.Position
 
-    ESP_Folder.Visible = ActivarESP
-
     for frutaObj, data in pairs(FrutasRegistradas) do
-        -- Si la fruta fue agarrada o destruida, limpiamos su letrero de la memoria
         if not frutaObj or not frutaObj.Parent or not data.CorePart or not data.CorePart.Parent then
             if data.Gui then data.Gui:Destroy() end
             FrutasRegistradas[frutaObj] = nil
             continue
         end
 
-        -- Si el ESP está activo, calculamos la nueva distancia sin crear lag
+        if data.Gui then
+            data.Gui.Enabled = ActivarESP
+        end
+
         if ActivarESP then
             local dist = math.floor((miPos - data.CorePart.Position).Magnitude)
             data.Texto.Text = "🍎 " .. frutaObj.Name .. "\n[" .. tostring(dist) .. "m]"
@@ -250,7 +251,6 @@ local function ejecutarTeleport()
     local menorDistancia = math.huge
     local frutaDestino = nil
 
-    -- Buscamos la más cercana en nuestra memoria rápida
     for obj, data in pairs(FrutasRegistradas) do
         if obj and obj.Parent and data.CorePart and data.CorePart.Parent then
             local dist = (root.Position - data.CorePart.Position).Magnitude
